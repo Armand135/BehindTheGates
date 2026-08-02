@@ -1,0 +1,407 @@
+// Behind The Gates — core data model (Technical Brief v1, Section 4)
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Auth (Auth.js / next-auth Prisma adapter models)
+// ─────────────────────────────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  visitor
+  host_admin
+  guide
+  platform_admin
+}
+
+enum HostVerificationStatus {
+  unclaimed
+  pending
+  verified
+}
+
+enum PayoutAccountStatus {
+  not_started
+  onboarding
+  active
+  restricted
+}
+
+enum AccessTier {
+  tier_1
+  tier_2
+  tier_3
+}
+
+enum ListingType {
+  bookable
+  virtual_only
+}
+
+enum ListingStatus {
+  draft
+  pending_review
+  live
+  paused
+}
+
+enum BookingType {
+  individual
+  group
+}
+
+enum BookingStatus {
+  pending_payment
+  confirmed
+  cancelled
+  completed
+  no_show
+}
+
+enum WaiverStatus {
+  pending
+  signed
+}
+
+enum PayoutStatus {
+  pending
+  in_transit
+  paid
+  failed
+}
+
+enum IncidentSeverity {
+  low
+  medium
+  high
+  critical
+}
+
+enum IncidentStatus {
+  open
+  resolved
+}
+
+enum HostOrgMemberRole {
+  owner
+  admin
+  guide
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Core entities
+// ─────────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  emailVerified DateTime?
+  passwordHash String?
+  phone        String?
+  name         String?
+  image        String?
+  role         UserRole  @default(visitor)
+  dateOfBirth  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  hostOrgMemberships HostOrganizationMember[]
+
+  bookingsMade     Booking[]        @relation("BookingsByUser")
+  attendeesAsGuardian Attendee[]    @relation("AttendeeGuardian")
+  waiversSigned    Waiver[]         @relation("WaiverSignedBy")
+  reviews          Review[]
+  incidentsReported Incident[]      @relation("IncidentReporter")
+  auditLogEntries  AuditLog[]       @relation("AuditActor")
+  waitlistEntries  WaitlistEntry[]
+
+  @@index([role])
+}
+
+model HostOrganization {
+  id                    String                  @id @default(cuid())
+  name                  String
+  description           String?                 @db.Text
+  industry              String?
+  logoUrl               String?
+  website               String?
+  verificationStatus    HostVerificationStatus  @default(unclaimed)
+  insuranceDocUrl        String?
+  insuranceExpiresAt     DateTime?
+  stripeConnectAccountId String?
+  payoutStatus           PayoutAccountStatus    @default(not_started)
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+
+  members  HostOrganizationMember[]
+  sites    Site[]
+  payouts  Payout[]
+
+  @@index([verificationStatus])
+}
+
+/// Join table: which users may administer a HostOrganization, and at what level.
+model HostOrganizationMember {
+  id                 String            @id @default(cuid())
+  hostOrganizationId String
+  userId             String
+  role               HostOrgMemberRole @default(admin)
+  createdAt          DateTime          @default(now())
+
+  hostOrganization HostOrganization @relation(fields: [hostOrganizationId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([hostOrganizationId, userId])
+}
+
+model Site {
+  id                 String     @id @default(cuid())
+  hostOrganizationId String
+  name               String
+  address            String
+  lat                Float?
+  lng                Float?
+  accessTier         AccessTier @default(tier_1)
+  safetyNotes        String?    @db.Text
+  accessibilityNotes String?    @db.Text
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  hostOrganization HostOrganization @relation(fields: [hostOrganizationId], references: [id], onDelete: Cascade)
+  tourListings     TourListing[]
+
+  @@index([hostOrganizationId])
+  @@index([accessTier])
+}
+
+model TourListing {
+  id                  String        @id @default(cuid())
+  siteId              String
+  title               String
+  description         String        @db.Text
+  industryTags        String[]      @default([])
+  durationMinutes     Int
+  minAge              Int           @default(0)
+  maxGroupSize        Int
+  /// Denominator of the chaperone ratio, e.g. 10 means "1 chaperone per 10 attendees".
+  chaperoneRatio       Int?
+  ppeRequired          String[]      @default([])
+  priceCents           Int           @default(0)
+  currency             String        @default("USD")
+  isFreeRecruitingVisit Boolean      @default(false)
+  cancellationPolicy   String?       @db.Text
+  /// Tier 3 (security-restricted) listings are virtual_only and never bookable — see Section 7.7.
+  listingType          ListingType   @default(bookable)
+  status               ListingStatus @default(draft)
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  site              Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  availabilitySlots AvailabilitySlot[]
+  waitlistEntries   WaitlistEntry[]
+
+  @@index([siteId])
+  @@index([status])
+  @@index([listingType])
+}
+
+model AvailabilitySlot {
+  id            String   @id @default(cuid())
+  tourListingId String
+  startTime     DateTime
+  endTime       DateTime
+  capacity      Int
+  seatsBooked   Int      @default(0)
+  isGroupOnly   Boolean  @default(false)
+  cancelledAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  tourListing TourListing @relation(fields: [tourListingId], references: [id], onDelete: Cascade)
+  bookings    Booking[]
+
+  @@index([tourListingId, startTime])
+}
+
+model Booking {
+  id                    String        @id @default(cuid())
+  availabilitySlotId    String
+  bookerUserId          String
+  bookingType           BookingType   @default(individual)
+  headcount              Int
+  chaperoneCount          Int          @default(0)
+  status                BookingStatus @default(pending_payment)
+  totalPriceCents        Int          @default(0)
+  stripePaymentIntentId  String?
+  cancelledAt            DateTime?
+  cancellationReason      String?
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+
+  availabilitySlot AvailabilitySlot @relation(fields: [availabilitySlotId], references: [id])
+  bookerUser       User             @relation("BookingsByUser", fields: [bookerUserId], references: [id])
+  attendees        Attendee[]
+  payouts          Payout[]
+  review           Review?
+  incidents        Incident[]
+
+  @@index([availabilitySlotId])
+  @@index([bookerUserId])
+  @@index([status])
+}
+
+model Attendee {
+  id             String    @id @default(cuid())
+  bookingId      String
+  name           String
+  dateOfBirth    DateTime?
+  guardianUserId String?
+  guardianEmail  String?
+  waiverId       String?   @unique
+
+  booking       Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  guardianUser  User?   @relation("AttendeeGuardian", fields: [guardianUserId], references: [id])
+  waiver        Waiver? @relation(fields: [waiverId], references: [id])
+
+  @@index([bookingId])
+}
+
+model Waiver {
+  id                  String       @id @default(cuid())
+  templateVersion     String
+  status              WaiverStatus @default(pending)
+  signedByUserId      String?
+  signedForAttendeeId String?      @unique
+  signaturePayload    String?      @db.Text
+  ipAddress           String?
+  signedAt            DateTime?
+  createdAt           DateTime     @default(now())
+
+  signedByUser User?     @relation("WaiverSignedBy", fields: [signedByUserId], references: [id])
+  attendee     Attendee?
+
+  @@index([signedByUserId])
+}
+
+model Payout {
+  id                 String       @id @default(cuid())
+  hostOrganizationId String
+  bookingId          String
+  amountCents        Int
+  stripeTransferId   String?
+  status             PayoutStatus @default(pending)
+  createdAt          DateTime     @default(now())
+
+  hostOrganization HostOrganization @relation(fields: [hostOrganizationId], references: [id])
+  booking          Booking          @relation(fields: [bookingId], references: [id])
+
+  @@index([hostOrganizationId])
+  @@index([bookingId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  bookingId String   @unique
+  userId    String
+  rating    Int
+  comment   String?  @db.Text
+  createdAt DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+model Incident {
+  id             String           @id @default(cuid())
+  bookingId      String
+  reportedByUserId String
+  description    String           @db.Text
+  severity       IncidentSeverity @default(low)
+  status         IncidentStatus   @default(open)
+  createdAt      DateTime         @default(now())
+  resolvedAt     DateTime?
+
+  booking        Booking @relation(fields: [bookingId], references: [id])
+  reportedByUser User    @relation("IncidentReporter", fields: [reportedByUserId], references: [id])
+
+  @@index([status])
+}
+
+/// Interest-list signup for Tier 3 (security-restricted) listings — Section 7.7:
+/// these sites never support physical booking, only virtual-tour content + waitlist.
+model WaitlistEntry {
+  id            String   @id @default(cuid())
+  tourListingId String
+  userId        String
+  note          String?
+  createdAt     DateTime @default(now())
+
+  tourListing TourListing @relation(fields: [tourListingId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([tourListingId, userId])
+}
+
+/// Append-only audit trail for listing approvals, waiver signatures, refunds, etc. (Section 8).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation("AuditActor", fields: [actorUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
