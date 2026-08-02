@@ -12,6 +12,9 @@ export const authConfig = {
   pages: {
     signIn: "/login",
   },
+  // Vercel preview deployments get a fresh generated URL each time, which
+  // Auth.js otherwise rejects as an untrusted host.
+  trustHost: true,
   providers: [],
   callbacks: {
     async session({ session, token }) {
