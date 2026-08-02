@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/authz";
 import { toErrorResponse } from "@/lib/api-errors";
 import { createBookingSchema } from "@/lib/validation";
 import { createBooking, sendWaiverRequestsForBooking } from "@/lib/bookings";
+import { resolveAppUrl } from "@/lib/app-url";
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
       attendees: body.attendees,
     });
 
-    const bookingUrl = `${process.env.NEXT_PUBLIC_APP_URL}/booking/${booking.id}`;
+    const bookingUrl = `${resolveAppUrl(req)}/booking/${booking.id}`;
     await sendWaiverRequestsForBooking(booking.id, bookingUrl, session.user.email!);
 
     return NextResponse.json({ booking }, { status: 201 });

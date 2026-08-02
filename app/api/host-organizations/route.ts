@@ -4,6 +4,7 @@ import { requireSession } from "@/lib/authz";
 import { toErrorResponse } from "@/lib/api-errors";
 import { createHostOrganizationSchema } from "@/lib/validation";
 import { getStripe } from "@/lib/stripe";
+import { resolveAppUrl } from "@/lib/app-url";
 
 export async function POST(req: NextRequest) {
   try {
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
         where: { id: hostOrganization.id },
         data: { stripeConnectAccountId: account.id, payoutStatus: "onboarding" },
       });
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+      const appUrl = resolveAppUrl(req);
       const link = await stripe.accountLinks.create({
         account: account.id,
         refresh_url: `${appUrl}/host/onboarding`,

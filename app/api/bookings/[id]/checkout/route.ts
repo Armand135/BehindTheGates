@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/authz";
 import { toErrorResponse } from "@/lib/api-errors";
 import { createCheckoutSession } from "@/lib/bookings";
+import { resolveAppUrl } from "@/lib/app-url";
 
 /**
  * Creates the Stripe Checkout Session for a booking. Not part of the
@@ -13,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   try {
     await requireSession();
     const { id } = await params;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin;
+    const appUrl = resolveAppUrl(req);
 
     const result = await createCheckoutSession(
       id,
