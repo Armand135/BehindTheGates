@@ -23,6 +23,15 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
     notFound();
   }
 
+  const reviews = await prisma.review.findMany({
+    where: { booking: { availabilitySlot: { tourListingId: listing.id } } },
+    include: { user: true },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+  });
+  const averageRating =
+    reviews.length > 0 ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length : null;
+
   return (
     <div className="mx-auto grid max-w-5xl gap-10 px-4 py-12 lg:grid-cols-3">
       <div className="lg:col-span-2">
@@ -30,6 +39,11 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
         <h1 className="mt-1 text-3xl font-semibold text-brand-900">{listing.title}</h1>
         <p className="mt-2 text-sm text-brand-500">
           {listing.site.name} · {listing.site.address}
+          {averageRating && (
+            <span className="ml-2 text-amber-600">
+              ★ {averageRating.toFixed(1)} ({reviews.length} review{reviews.length === 1 ? "" : "s"})
+            </span>
+          )}
         </p>
 
         <p className="mt-6 whitespace-pre-line text-brand-700">{listing.description}</p>
@@ -65,6 +79,23 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           <div className="mt-8">
             <h2 className="font-semibold text-brand-800">Cancellation policy</h2>
             <p className="mt-1 text-sm text-brand-600">{listing.cancellationPolicy}</p>
+          </div>
+        )}
+
+        {reviews.length > 0 && (
+          <div className="mt-8">
+            <h2 className="font-semibold text-brand-800">Reviews</h2>
+            <div className="mt-3 space-y-4">
+              {reviews.map((review) => (
+                <div key={review.id} className="rounded-md border border-brand-100 bg-white p-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-brand-800">{review.user.name ?? "Visitor"}</span>
+                    <span className="text-amber-500">{"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}</span>
+                  </div>
+                  {review.comment && <p className="mt-2 text-sm text-brand-600">{review.comment}</p>}
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>

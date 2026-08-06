@@ -363,3 +363,36 @@ export async function hostCancelSlot(params: { availabilitySlotId: string; reaso
     metadata: { reason: params.reason, bookingsCancelled: bookings.length },
   });
 }
+
+/**
+ * Guide/host day-of check-in (Technical Brief Section 2: the Guide role
+ * "checks in visitors, marks no-shows"). Moves a confirmed booking to
+ * either completed or no_show — the only two terminal states reachable
+ * from here. Completing a booking is also what unlocks the visitor's
+ * ability to leave a review.
+ */
+export async function markBookingOutcome(params: {
+  bookingId: string;
+  outcome: "completed" | "no_show";
+  actorUserId: string;
+}) {
+  const booking = await prisma.booking.findUnique({ where: { id: params.bookingId } });
+  if (!booking) throw new BookingError("Booking not found.", 404);
+  if (booking.status !== "confirmed") {
+    throw new BookingError("Only confirmed bookings can be checked in.", 409);
+  }
+
+  const updated = await prisma.booking.update({
+    where: { id: params.bookingId },
+    data: { status: params.outcome },
+  });
+
+  await logAudit({
+    actorUserId: params.actorUserId,
+    action: `booking.${params.outcome}`,
+    entityType: "Booking",
+    entityId: params.bookingId,
+  });
+
+  return updated;
+}

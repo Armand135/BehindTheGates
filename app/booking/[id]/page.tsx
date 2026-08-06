@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { WaiverFlow } from "@/components/waiver-flow";
+import { ReviewForm } from "@/components/review-form";
 
 export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +14,7 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
     include: {
       attendees: { include: { waiver: true } },
       availabilitySlot: { include: { tourListing: { include: { site: { include: { hostOrganization: true } } } } } },
+      review: true,
     },
   });
 
@@ -57,6 +59,25 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
         <p className="mt-6 rounded-md border border-brand-100 bg-white p-4 text-sm text-brand-700">
           This booking was cancelled{booking.cancellationReason ? `: ${booking.cancellationReason}` : "."}
         </p>
+      )}
+
+      {booking.status === "no_show" && (
+        <p className="mt-6 rounded-md border border-brand-100 bg-white p-4 text-sm text-brand-700">
+          This booking was marked as a no-show by the host.
+        </p>
+      )}
+
+      {booking.status === "completed" && (
+        <div className="mt-6">
+          {booking.review ? (
+            <div className="rounded-md border border-brand-100 bg-white p-4 text-sm">
+              <p className="text-amber-500">{"★".repeat(booking.review.rating)}{"☆".repeat(5 - booking.review.rating)}</p>
+              {booking.review.comment && <p className="mt-2 text-brand-700">{booking.review.comment}</p>}
+            </div>
+          ) : (
+            <ReviewForm bookingId={booking.id} />
+          )}
+        </div>
       )}
     </div>
   );

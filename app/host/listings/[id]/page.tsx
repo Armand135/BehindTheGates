@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { CreateAvailabilityForm } from "@/components/host/create-availability-form";
+import { CheckInRow } from "@/components/host/check-in-row";
 
 export default async function HostListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,7 +13,15 @@ export default async function HostListingPage({ params }: { params: Promise<{ id
     where: { id },
     include: {
       site: { include: { hostOrganization: { include: { members: true } } } },
-      availabilitySlots: { orderBy: { startTime: "asc" } },
+      availabilitySlots: {
+        orderBy: { startTime: "asc" },
+        include: {
+          bookings: {
+            where: { status: { in: ["confirmed", "completed", "no_show"] } },
+            include: { bookerUser: true },
+          },
+        },
+      },
     },
   });
 
@@ -29,11 +38,25 @@ export default async function HostListingPage({ params }: { params: Promise<{ id
         <h2 className="font-semibold text-brand-800">Availability</h2>
         <div className="mt-3 space-y-2">
           {listing.availabilitySlots.map((slot) => (
-            <div key={slot.id} className="flex items-center justify-between rounded-md border border-brand-100 bg-white p-3 text-sm">
-              <span>{new Date(slot.startTime).toLocaleString()}</span>
-              <span className="text-brand-500">
-                {slot.seatsBooked}/{slot.capacity} booked {slot.cancelledAt ? "· cancelled" : ""}
-              </span>
+            <div key={slot.id} className="rounded-md border border-brand-100 bg-white p-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span>{new Date(slot.startTime).toLocaleString()}</span>
+                <span className="text-brand-500">
+                  {slot.seatsBooked}/{slot.capacity} booked {slot.cancelledAt ? "· cancelled" : ""}
+                </span>
+              </div>
+              {slot.bookings.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-brand-50 pt-3">
+                  {slot.bookings.map((booking) => (
+                    <div key={booking.id} className="flex items-center justify-between text-xs">
+                      <span>
+                        {booking.bookerUser.name ?? booking.bookerUser.email} — {booking.headcount} attendee(s)
+                      </span>
+                      <CheckInRow bookingId={booking.id} status={booking.status} />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {listing.availabilitySlots.length === 0 && (
