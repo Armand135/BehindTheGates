@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 
 export function InsuranceForm({ hostOrganizationId }: { hostOrganizationId: string }) {
   const router = useRouter();
-  const [url, setUrl] = useState("");
+  const [file, setFile] = useState<File | null>(null);
   const [expiresAt, setExpiresAt] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   return (
     <form
@@ -15,25 +16,55 @@ export function InsuranceForm({ hostOrganizationId }: { hostOrganizationId: stri
       onSubmit={async (e) => {
         e.preventDefault();
         setError(null);
-        const res = await fetch(`/api/host-organizations/${hostOrganizationId}/insurance`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ insuranceDocUrl: url, insuranceExpiresAt: expiresAt }),
-        });
-        if (!res.ok) {
-          const data = await res.json();
-          setError(data.error ?? "Could not save insurance doc.");
+        if (!file) {
+          setError("Choose a file first.");
           return;
         }
-        router.refresh();
+        setSubmitting(true);
+        try {
+          const urlRes = await fetch(`/api/host-organizations/${hostOrganizationId}/insurance/upload-url`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ fileName: file.name }),
+          });
+          if (!urlRes.ok) {
+            const data = await urlRes.json();
+            setError(data.error ?? "Could not start upload.");
+            return;
+          }
+          const { signedUrl, publicUrl } = await urlRes.json();
+
+          const uploadRes = await fetch(signedUrl, {
+            method: "PUT",
+            headers: { "Content-Type": file.type || "application/octet-stream" },
+            body: file,
+          });
+          if (!uploadRes.ok) {
+            setError("File upload failed — check that the storage bucket is configured.");
+            return;
+          }
+
+          const saveRes = await fetch(`/api/host-organizations/${hostOrganizationId}/insurance`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ insuranceDocUrl: publicUrl, insuranceExpiresAt: expiresAt }),
+          });
+          if (!saveRes.ok) {
+            const data = await saveRes.json();
+            setError(data.error ?? "Could not save insurance doc.");
+            return;
+          }
+          router.refresh();
+        } finally {
+          setSubmitting(false);
+        }
       }}
     >
       <input
         required
-        type="url"
-        placeholder="Insurance document URL"
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        type="file"
+        accept="application/pdf,image/*"
+        onChange={(e) => setFile(e.target.files?.[0] ?? null)}
         className="rounded-md border border-amber-300 px-2 py-1.5 text-sm"
       />
       <input
@@ -43,8 +74,12 @@ export function InsuranceForm({ hostOrganizationId }: { hostOrganizationId: stri
         onChange={(e) => setExpiresAt(e.target.value)}
         className="rounded-md border border-amber-300 px-2 py-1.5 text-sm"
       />
-      <button type="submit" className="rounded-md bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700">
-        Save
+      <button
+        type="submit"
+        disabled={submitting}
+        className="rounded-md bg-amber-600 px-3 py-1.5 text-xs text-white hover:bg-amber-700 disabled:opacity-50"
+      >
+        {submitting ? "Uploading..." : "Upload & save"}
       </button>
       {error && <p className="w-full text-xs text-red-600">{error}</p>}
     </form>
