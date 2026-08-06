@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { BookingForm } from "@/components/booking-form";
 import { WaitlistForm } from "@/components/waitlist-form";
+import { SiteMap } from "@/components/site-map";
 
 export const revalidate = 60;
 
@@ -45,6 +46,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             </span>
           )}
         </p>
+
+        {listing.site.lat !== null && listing.site.lng !== null && (
+          <SiteMap lat={listing.site.lat} lng={listing.site.lng} label={listing.site.name} />
+        )}
 
         <p className="mt-6 whitespace-pre-line text-brand-700">{listing.description}</p>
 
