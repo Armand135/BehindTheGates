@@ -1,0 +1,123 @@
+# Configurable port layout. New layouts can be dropped into this directory
+# and referenced by filename (without extension) when starting a simulation
+# run or an optimization request -- no code changes required.
+name: default_port
+description: A mid-size container terminal with 4 berths, 8 quay cranes, 6 yard blocks, 3 gates.
+
+berths:
+  - code: B1
+    length_m: 350
+    max_draft_m: 16.5
+    crane_slots: 3
+    position: { x: 120, y: 80 }
+  - code: B2
+    length_m: 350
+    max_draft_m: 16.5
+    crane_slots: 3
+    position: { x: 120, y: 180 }
+  - code: B3
+    length_m: 300
+    max_draft_m: 14.0
+    crane_slots: 3
+    position: { x: 120, y: 280 }
+  - code: B4
+    length_m: 300
+    max_draft_m: 14.0
+    crane_slots: 3
+    position: { x: 120, y: 380 }
+
+cranes:
+  - code: QC1
+    berth_code: B1
+    moves_per_hour: 30
+    position: { x: 100, y: 60 }
+  - code: QC2
+    berth_code: B1
+    moves_per_hour: 30
+    position: { x: 130, y: 60 }
+  - code: QC3
+    berth_code: B1
+    moves_per_hour: 28
+    position: { x: 160, y: 60 }
+  - code: QC4
+    berth_code: B2
+    moves_per_hour: 28
+    position: { x: 100, y: 160 }
+  - code: QC5
+    berth_code: B2
+    moves_per_hour: 28
+    position: { x: 130, y: 160 }
+  - code: QC6
+    berth_code: B2
+    moves_per_hour: 26
+    position: { x: 160, y: 160 }
+  - code: QC7
+    berth_code: B3
+    moves_per_hour: 26
+    position: { x: 100, y: 260 }
+  - code: QC8
+    berth_code: B3
+    moves_per_hour: 24
+    position: { x: 130, y: 260 }
+  - code: QC9
+    berth_code: B3
+    moves_per_hour: 24
+    position: { x: 160, y: 260 }
+  - code: QC10
+    berth_code: B4
+    moves_per_hour: 24
+    position: { x: 100, y: 360 }
+  - code: QC11
+    berth_code: B4
+    moves_per_hour: 22
+    position: { x: 130, y: 360 }
+  - code: QC12
+    berth_code: B4
+    moves_per_hour: 22
+    position: { x: 160, y: 360 }
+
+yard_blocks:
+  - code: Y1
+    capacity_teu: 4000
+    position: { x: 300, y: 80 }
+  - code: Y2
+    capacity_teu: 4000
+    position: { x: 300, y: 180 }
+  - code: Y3
+    capacity_teu: 3000
+    position: { x: 300, y: 280 }
+  - code: Y4
+    capacity_teu: 3000
+    position: { x: 300, y: 380 }
+  - code: Y5
+    capacity_teu: 2000
+    position: { x: 420, y: 130 }
+  - code: Y6
+    capacity_teu: 2000
+    position: { x: 420, y: 330 }
+
+gates:
+  - code: G1
+    lanes: 4
+    position: { x: 500, y: 200 }
+  - code: G2
+    lanes: 3
+    position: { x: 500, y: 280 }
+  - code: G3
+    lanes: 3
+    position: { x: 500, y: 360 }
+
+# Distributions used to synthesize ship / truck arrivals when a run has no
+# real AIS or gate-system feed attached.
+arrival_model:
+  ship_size_teu:
+    min: 800
+    max: 14000
+  # Fraction of a ship's nominal TEU capacity actually exchanged
+  # (discharged + loaded) at this port call.
+  ship_moves_ratio:
+    min: 0.12
+    max: 0.30
+  truck_processing_minutes:
+    min: 6
+    max: 18
