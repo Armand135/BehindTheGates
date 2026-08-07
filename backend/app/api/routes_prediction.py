@@ -1,5 +1,7 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from app.auth.deps import get_current_user
+from app.models.auth import User
 from app.prediction import service
 from app.prediction.train import train_all
 from app.schemas.prediction import (
@@ -17,29 +19,31 @@ router = APIRouter(prefix="/prediction", tags=["prediction"])
 
 
 @router.post("/eta", response_model=EtaPredictionResponse)
-def predict_eta(req: EtaPredictionRequest):
+def predict_eta(req: EtaPredictionRequest, current_user: User = Depends(get_current_user)):
     return service.predict_eta(req)
 
 
 @router.post("/berth-congestion", response_model=BerthCongestionResponse)
-def predict_berth_congestion(req: BerthCongestionRequest):
+def predict_berth_congestion(req: BerthCongestionRequest, current_user: User = Depends(get_current_user)):
     return service.predict_berth_congestion(req)
 
 
 @router.post("/truck-queue", response_model=TruckQueueResponse)
-def predict_truck_queue(req: TruckQueueRequest):
+def predict_truck_queue(req: TruckQueueRequest, current_user: User = Depends(get_current_user)):
     return service.predict_truck_queue(req)
 
 
 @router.post("/crane-utilization", response_model=CraneUtilizationResponse)
-def predict_crane_utilization(req: CraneUtilizationRequest):
+def predict_crane_utilization(req: CraneUtilizationRequest, current_user: User = Depends(get_current_user)):
     return service.predict_crane_utilization(req)
 
 
 @router.post("/train")
-def train():
+def train(current_user: User = Depends(get_current_user)):
     """(Re)trains all prediction models from synthetic data and saves
-    artifacts. Call after replacing `data_generation.py` with real
-    historical-data loaders."""
+    artifacts. Models are shared across every tenant (not org-scoped), so
+    this is a global, relatively expensive operation -- any authenticated
+    user can trigger it for the MVP, but a real deployment should restrict
+    this to an admin role."""
     metadata = train_all()
     return {"trained": [m["model_name"] for m in metadata["models"]], "version": metadata["version"]}

@@ -2,9 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import routes_copilot, routes_kpi, routes_optimization, routes_prediction, routes_simulation, ws
+from app.auth import routes as routes_auth
 from app.config import get_settings
 from app.database import Base, engine
-from app.models import entities  # noqa: F401  (ensures models are registered before create_all)
+from app.models import auth, entities  # noqa: F401  (ensures models are registered before create_all)
 
 settings = get_settings()
 
@@ -22,6 +23,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(routes_auth.router)
 app.include_router(routes_simulation.router)
 app.include_router(routes_optimization.router)
 app.include_router(routes_prediction.router)

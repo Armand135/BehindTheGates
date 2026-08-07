@@ -14,6 +14,7 @@ backend/app/
   optimization/   OR-Tools berth allocation + crane scheduling
   prediction/     XGBoost ETA / congestion / queue / utilization models
   copilot/        LLM chat with tool-use retrieval over live data
+  auth/           JWT auth + multi-tenancy (signup/login, org scoping)
   api/            FastAPI routers + WebSocket wiring everything together
   models/         SQLAlchemy ORM (Postgres)
   core/layouts/   YAML port layout definitions
@@ -126,7 +127,34 @@ and everything downstream (training, inference, API) keeps working as-is.
   useful, data-backed answer (see `POST /copilot/chat`, `mode` field in the
   response: `"llm"` vs `"retrieval_only"`).
 
-## 6. Platform
+## 6. Auth & multi-tenancy (`app/auth/`)
+
+Every piece of port data (simulation runs, their events/entities, and
+optimization results) belongs to an `Organization`; every `User` belongs to
+exactly one. There's no cross-org sharing yet -- signing up creates a brand
+new organization with that user as its `owner`.
+
+- `security.py` -- bcrypt password hashing, JWT issue/verify (`pyjwt`).
+- `deps.py` -- `get_current_user` FastAPI dependency (reads
+  `Authorization: Bearer <token>`); also exposes `get_user_from_token` for
+  the WebSocket endpoint, which authenticates via a `?token=` query param
+  instead since browsers can't set custom headers on a WS handshake.
+- `routes.py` -- `POST /auth/signup`, `POST /auth/login`, `GET /auth/me`.
+- Every data-touching route requires `get_current_user` and filters (or
+  verifies ownership) by `current_user.org_id`. A run that exists but
+  belongs to another org returns `404`, never `403` -- so one tenant can't
+  even confirm another tenant's run ID exists.
+- The copilot's tool-use dispatch (`copilot/tools.py`) takes `org_id` as a
+  trusted parameter from the authenticated session, never from the LLM's
+  tool-call arguments, so the model can't be tricked into fetching another
+  tenant's data.
+
+This is deliberately minimal for the MVP: no invite flow (one owner per
+signup), no SSO, no role-based restrictions beyond `owner`/`member` existing
+as a field. Extending to real customers needs at least an invite/join flow
+and, for enterprise port operators, SSO (SAML/OIDC) support.
+
+## 7. Platform
 
 - **Backend**: FastAPI + SQLAlchemy 2.0 + Postgres + Redis. `backend/app/main.py`
   calls `Base.metadata.create_all` on startup for convenience; Alembic
@@ -144,14 +172,23 @@ See `.env.example` at the repo root. Notably:
 
 - `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` -- optional; copilot runs in
   retrieval-only mode without a key.
+- `JWT_SECRET_KEY` -- **must** be overridden with a real random value for
+  any non-local deployment (`python -c "import secrets; print(secrets.token_hex(32))"`).
+  The default in `.env.example` only exists so local dev works out of the box.
 - `SIMULATION_DEFAULT_ACCELERATION` -- default pacing for live runs.
 - `BACKEND_CORS_ORIGINS` -- must include whatever origin the frontend is
   served from (defaults to `http://localhost:3000`).
 
 ## API reference (selected)
 
+All endpoints below except `/auth/signup` and `/auth/login` require
+`Authorization: Bearer <token>` (or `?token=` for the WebSocket).
+
 | Method | Path | Purpose |
 |---|---|---|
+| POST | `/auth/signup` | Create an organization + owner user, returns a JWT |
+| POST | `/auth/login` | Returns a JWT for an existing user |
+| GET | `/auth/me` | Current user + organization |
 | GET | `/simulation/layouts` | List available port layouts |
 | POST | `/simulation/runs` | Run a simulation synchronously (batch) |
 | POST | `/simulation/runs/live` | Start a real-time-paced run, streamed over WebSocket |

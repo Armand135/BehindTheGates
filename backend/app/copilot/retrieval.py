@@ -2,6 +2,12 @@
 KPIs, recent event history, and stored optimization comparisons. Each
 function returns plain dicts so they can be used directly as both Anthropic
 tool results and the deterministic fallback's data source.
+
+Every function is scoped by `org_id` -- the copilot must never let one
+tenant's chat see another tenant's port data, so a run/event/optimization
+row that doesn't belong to the caller's org is treated the same as "not
+found" rather than surfaced with a permission error (avoids confirming
+that another org's run ID exists at all).
 """
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
@@ -10,18 +16,29 @@ from app.models.entities import Event, OptimizationRun, SimulationRun
 from app.simulation import service as simulation_service
 
 
-def resolve_run_id(db: Session, run_id: str | None) -> str | None:
+def resolve_run_id(db: Session, run_id: str | None, org_id: str) -> str | None:
     if run_id:
-        return run_id
+        run = db.get(SimulationRun, run_id)
+        return run_id if run and run.org_id == org_id else None
     latest = db.execute(
-        select(SimulationRun).order_by(desc(SimulationRun.created_at)).limit(1)
+        select(SimulationRun)
+        .where(SimulationRun.org_id == org_id)
+        .order_by(desc(SimulationRun.created_at))
+        .limit(1)
     ).scalar_one_or_none()
     return latest.id if latest else None
 
 
-def get_kpis(db: Session, run_id: str) -> dict:
+def _owned_run(db: Session, run_id: str, org_id: str) -> SimulationRun | None:
+    run = db.get(SimulationRun, run_id)
+    return run if run and run.org_id == org_id else None
+
+
+def get_kpis(db: Session, run_id: str, org_id: str) -> dict:
+    if _owned_run(db, run_id, org_id) is None:
+        return {"error": f"Unknown simulation run {run_id}"}
     try:
-        snapshot = simulation_service.get_state_at(db, run_id, at_hours=None)
+        snapshot = simulation_service.get_state_at(db, run_id, at_hours=None, org_id=org_id)
     except ValueError as e:
         return {"error": str(e)}
     return {
@@ -31,7 +48,9 @@ def get_kpis(db: Session, run_id: str) -> dict:
     }
 
 
-def get_recent_events(db: Session, run_id: str, limit: int = 15, event_type: str | None = None) -> dict:
+def get_recent_events(db: Session, run_id: str, org_id: str, limit: int = 15, event_type: str | None = None) -> dict:
+    if _owned_run(db, run_id, org_id) is None:
+        return {"error": f"Unknown simulation run {run_id}"}
     query = select(Event).where(Event.run_id == run_id)
     if event_type:
         query = query.where(Event.event_type == event_type)
@@ -49,10 +68,12 @@ def get_recent_events(db: Session, run_id: str, limit: int = 15, event_type: str
     }
 
 
-def get_optimization_comparison(db: Session, run_id: str) -> dict:
+def get_optimization_comparison(db: Session, run_id: str, org_id: str) -> dict:
+    if _owned_run(db, run_id, org_id) is None:
+        return {"error": f"Unknown simulation run {run_id}"}
     runs = db.execute(
         select(OptimizationRun)
-        .where(OptimizationRun.simulation_run_id == run_id)
+        .where(OptimizationRun.simulation_run_id == run_id, OptimizationRun.org_id == org_id)
         .order_by(desc(OptimizationRun.created_at))
         .limit(2)
     ).scalars().all()
@@ -70,9 +91,12 @@ def get_optimization_comparison(db: Session, run_id: str) -> dict:
     }
 
 
-def list_simulation_runs(db: Session, limit: int = 10) -> dict:
+def list_simulation_runs(db: Session, org_id: str, limit: int = 10) -> dict:
     runs = db.execute(
-        select(SimulationRun).order_by(desc(SimulationRun.created_at)).limit(limit)
+        select(SimulationRun)
+        .where(SimulationRun.org_id == org_id)
+        .order_by(desc(SimulationRun.created_at))
+        .limit(limit)
     ).scalars().all()
     return {
         "runs": [

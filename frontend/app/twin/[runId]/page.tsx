@@ -4,18 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import TerminalMap from "@/components/TerminalMap";
 import { api, WS_URL } from "@/lib/api";
+import { getToken } from "@/lib/auth";
 import type { SimulationRun, TerminalState } from "@/lib/types";
 
 export default function TwinPage() {
   const { runId } = useParams<{ runId: string }>();
   const [run, setRun] = useState<SimulationRun | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [state, setState] = useState<TerminalState | null>(null);
   const [atHours, setAtHours] = useState<number>(0);
   const [live, setLive] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    api.getRun(runId).then(setRun).catch(() => {});
+    api.getRun(runId).then(setRun).catch(() => setNotFound(true));
   }, [runId]);
 
   useEffect(() => {
@@ -30,7 +32,8 @@ export default function TwinPage() {
       wsRef.current?.close();
       return;
     }
-    const ws = new WebSocket(`${WS_URL}/ws/simulation/${runId}`);
+    const token = getToken();
+    const ws = new WebSocket(`${WS_URL}/ws/simulation/${runId}?token=${encodeURIComponent(token || "")}`);
     wsRef.current = ws;
     ws.onmessage = (evt) => {
       const data = JSON.parse(evt.data);
@@ -43,6 +46,15 @@ export default function TwinPage() {
     return () => ws.close();
   }, [live, runId]);
 
+  if (notFound) {
+    return (
+      <div className="page">
+        <p className="muted">
+          This simulation run doesn&apos;t exist, or doesn&apos;t belong to your organization.
+        </p>
+      </div>
+    );
+  }
   if (!run) return <div className="page">Loading run...</div>;
 
   return (

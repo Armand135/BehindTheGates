@@ -53,18 +53,22 @@ TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
+# org_id is deliberately not part of any tool's input_schema -- it must come
+# from the authenticated session (passed explicitly to call_tool), never
+# from the LLM's tool-call arguments, or a compromised/confused model could
+# ask for another tenant's data by supplying a different org_id.
 _DISPATCH: dict[str, Callable[..., dict]] = {
-    "get_kpis": lambda db, **kw: retrieval.get_kpis(db, kw["run_id"]),
-    "get_recent_events": lambda db, **kw: retrieval.get_recent_events(
-        db, kw["run_id"], kw.get("limit", 15), kw.get("event_type")
+    "get_kpis": lambda db, org_id, **kw: retrieval.get_kpis(db, kw["run_id"], org_id),
+    "get_recent_events": lambda db, org_id, **kw: retrieval.get_recent_events(
+        db, kw["run_id"], org_id, kw.get("limit", 15), kw.get("event_type")
     ),
-    "get_optimization_comparison": lambda db, **kw: retrieval.get_optimization_comparison(db, kw["run_id"]),
-    "list_simulation_runs": lambda db, **kw: retrieval.list_simulation_runs(db, kw.get("limit", 10)),
+    "get_optimization_comparison": lambda db, org_id, **kw: retrieval.get_optimization_comparison(db, kw["run_id"], org_id),
+    "list_simulation_runs": lambda db, org_id, **kw: retrieval.list_simulation_runs(db, org_id, kw.get("limit", 10)),
 }
 
 
-def call_tool(db: Session, name: str, tool_input: dict) -> dict:
+def call_tool(db: Session, name: str, tool_input: dict, org_id: str) -> dict:
     handler = _DISPATCH.get(name)
     if handler is None:
         return {"error": f"Unknown tool '{name}'"}
-    return handler(db, **tool_input)
+    return handler(db, org_id, **tool_input)

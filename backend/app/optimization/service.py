@@ -16,9 +16,9 @@ from app.schemas.optimization import (
 )
 
 
-def build_scenario_from_run(db: Session, run_id: str, horizon_hours: float = 96.0) -> BerthAllocationRequest:
+def build_scenario_from_run(db: Session, run_id: str, org_id: str, horizon_hours: float = 96.0) -> BerthAllocationRequest:
     run = db.get(SimulationRun, run_id)
-    if run is None:
+    if run is None or run.org_id != org_id:
         raise ValueError(f"Unknown simulation run {run_id}")
 
     ships = db.execute(select(Ship).where(Ship.run_id == run_id)).scalars().all()
@@ -43,12 +43,12 @@ def build_scenario_from_run(db: Session, run_id: str, horizon_hours: float = 96.
     return BerthAllocationRequest(ships=ship_reqs, berths=berth_specs, horizon_hours=horizon_hours, simulation_run_id=run_id)
 
 
-def compare_and_persist(db: Session, req: BerthAllocationRequest) -> BerthComparisonResult:
+def compare_and_persist(db: Session, req: BerthAllocationRequest, org_id: str) -> BerthComparisonResult:
     result = berth_allocation.compare(req)
 
     for r in (result.baseline, result.optimized):
         db.add(OptimizationRun(
-            simulation_run_id=req.simulation_run_id, strategy=r.strategy, objective="berth_allocation",
+            org_id=org_id, simulation_run_id=req.simulation_run_id, strategy=r.strategy, objective="berth_allocation",
             total_waiting_hours=r.total_waiting_hours, makespan_hours=r.makespan_hours,
             solver_status=r.solver_status, solve_time_seconds=r.solve_time_seconds,
             assignments={"assignments": [a.model_dump() for a in r.assignments]},

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import AuthGate from "@/components/AuthGate";
+import Nav from "@/components/Nav";
+import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,14 +13,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <nav className="nav">
-          <span className="brand">⚓ Port Ops Copilot</span>
-          <Link href="/">Dashboard</Link>
-          <Link href="/twin">Digital Twin</Link>
-          <Link href="/optimization">Optimization</Link>
-          <Link href="/copilot">Copilot</Link>
-        </nav>
-        <main>{children}</main>
+        <AuthProvider>
+          <Nav />
+          <main>
+            <AuthGate>{children}</AuthGate>
+          </main>
+        </AuthProvider>
       </body>
     </html>
   );

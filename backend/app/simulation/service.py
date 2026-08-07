@@ -27,9 +27,10 @@ from app.simulation.runner import PortSimulation
 from app.schemas.simulation import SimulationRunCreate
 
 
-def create_and_run(db: Session, req: SimulationRunCreate) -> SimulationRun:
+def create_and_run(db: Session, req: SimulationRunCreate, org_id: str) -> SimulationRun:
     layout = load_layout(req.layout_name)
     run = SimulationRun(
+        org_id=org_id,
         name=req.name,
         layout_name=req.layout_name,
         acceleration=req.acceleration,
@@ -95,9 +96,9 @@ def _persist_results(db: Session, run: SimulationRun, sim: PortSimulation) -> No
         ))
 
 
-def get_state_at(db: Session, run_id: str, at_hours: float | None) -> dict:
+def get_state_at(db: Session, run_id: str, at_hours: float | None, org_id: str) -> dict:
     run = db.get(SimulationRun, run_id)
-    if run is None:
+    if run is None or run.org_id != org_id:
         raise ValueError(f"Unknown simulation run {run_id}")
     layout = load_layout(run.layout_name)
     events = db.execute(

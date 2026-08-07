@@ -1,3 +1,17 @@
+export interface UserOut {
+  id: string;
+  email: string;
+  role: "owner" | "member";
+  org_id: string;
+  organization_name: string;
+}
+
+export interface TokenResponse {
+  access_token: string;
+  token_type: string;
+  user: UserOut;
+}
+
 export interface SimulationRun {
   id: string;
   name: string;

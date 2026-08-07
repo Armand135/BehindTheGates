@@ -1,3 +1,4 @@
+from app.models.auth import Organization, User, UserRole
 from app.models.entities import (
     Berth,
     Container,
@@ -22,4 +23,7 @@ __all__ = [
     "Gate",
     "Event",
     "OptimizationRun",
+    "Organization",
+    "User",
+    "UserRole",
 ]

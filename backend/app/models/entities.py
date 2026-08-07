@@ -41,6 +41,7 @@ class SimulationRun(Base):
     __tablename__ = "simulation_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
     name: Mapped[str] = mapped_column(String(120))
     layout_name: Mapped[str] = mapped_column(String(80), default="default_port")
     acceleration: Mapped[float] = mapped_column(Float, default=60.0)
@@ -230,6 +231,7 @@ class OptimizationRun(Base):
     __tablename__ = "optimization_runs"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    org_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"))
     simulation_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     strategy: Mapped[str] = mapped_column(String(20))  # "baseline" | "optimized"
     objective: Mapped[str] = mapped_column(String(40), default="berth_allocation")

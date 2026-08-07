@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-5"
 
+    # Auth
+    # MUST be overridden via env var in any non-local deployment -- this
+    # default only exists so local dev works out of the box.
+    jwt_secret_key: str = "dev-only-insecure-secret-change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+
     @property
     def cors_origins(self) -> List[str]:
         return [o.strip() for o in self.backend_cors_origins.split(",") if o.strip()]

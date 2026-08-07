@@ -36,12 +36,12 @@ def _get_client():
     return anthropic.Anthropic(api_key=settings.anthropic_api_key), settings
 
 
-def handle_chat(db: Session, messages: list[ChatMessage], simulation_run_id: str | None) -> ChatResponse:
-    run_id = retrieval.resolve_run_id(db, simulation_run_id)
+def handle_chat(db: Session, messages: list[ChatMessage], simulation_run_id: str | None, org_id: str) -> ChatResponse:
+    run_id = retrieval.resolve_run_id(db, simulation_run_id, org_id)
     client, settings = _get_client()
 
     if client is None:
-        return _retrieval_only_reply(db, messages, run_id)
+        return _retrieval_only_reply(db, messages, run_id, org_id)
 
     anthropic_messages = [{"role": m.role, "content": m.content} for m in messages]
     tool_calls: list[ChatToolCall] = []
@@ -64,7 +64,7 @@ def handle_chat(db: Session, messages: list[ChatMessage], simulation_run_id: str
         for block in response.content:
             if block.type != "tool_use":
                 continue
-            output = tools.call_tool(db, block.name, block.input)
+            output = tools.call_tool(db, block.name, block.input, org_id)
             tool_calls.append(ChatToolCall(tool=block.name, input=block.input, output=output))
             tool_results.append({
                 "type": "tool_result", "tool_use_id": block.id, "content": str(output),
@@ -77,7 +77,7 @@ def handle_chat(db: Session, messages: list[ChatMessage], simulation_run_id: str
     )
 
 
-def _retrieval_only_reply(db: Session, messages: list[ChatMessage], run_id: str | None) -> ChatResponse:
+def _retrieval_only_reply(db: Session, messages: list[ChatMessage], run_id: str | None, org_id: str) -> ChatResponse:
     question = messages[-1].content.lower() if messages else ""
     tool_calls: list[ChatToolCall] = []
 
@@ -88,14 +88,14 @@ def _retrieval_only_reply(db: Session, messages: list[ChatMessage], run_id: str 
             tool_calls=[], mode="retrieval_only",
         )
 
-    kpis = retrieval.get_kpis(db, run_id)
+    kpis = retrieval.get_kpis(db, run_id, org_id)
     tool_calls.append(ChatToolCall(tool="get_kpis", input={"run_id": run_id}, output=kpis))
     lines = [f"Status for simulation run {run_id} (sim time {kpis.get('sim_time_hours', '?')}h):"]
     for k, v in kpis.get("kpis", {}).items():
         lines.append(f"  - {k.replace('_', ' ')}: {v}")
 
     if re.search(r"\b(optimiz|compar|berth alloc)", question) or not question:
-        opt = retrieval.get_optimization_comparison(db, run_id)
+        opt = retrieval.get_optimization_comparison(db, run_id, org_id)
         tool_calls.append(ChatToolCall(tool="get_optimization_comparison", input={"run_id": run_id}, output=opt))
         if "results" in opt:
             lines.append("\nLatest berth allocation comparison:")
@@ -108,7 +108,7 @@ def _retrieval_only_reply(db: Session, messages: list[ChatMessage], run_id: str 
             lines.append(f"\n{opt.get('message', '')} Try POST /optimization/compare/{run_id}.")
 
     if re.search(r"\b(event|recent|history|happen)", question):
-        events = retrieval.get_recent_events(db, run_id, limit=8)
+        events = retrieval.get_recent_events(db, run_id, org_id, limit=8)
         tool_calls.append(ChatToolCall(tool="get_recent_events", input={"run_id": run_id, "limit": 8}, output=events))
         lines.append("\nMost recent events:")
         for e in events["events"]:
