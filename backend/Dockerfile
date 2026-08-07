@@ -13,4 +13,6 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (not exec-array) so ${PORT} expands -- Render and similar
+# platforms assign the port dynamically via this env var at runtime.
+CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}

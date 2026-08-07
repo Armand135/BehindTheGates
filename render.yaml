@@ -1,0 +1,71 @@
+# Render Blueprint: provisions the full stack (backend, frontend, Postgres,
+# Redis) from this repo. In the Render dashboard: New -> Blueprint -> select
+# this repo -> Apply. See docs/DEPLOYMENT.md for the full walkthrough and
+# the manual steps Render's blueprint spec can't express (ANTHROPIC_API_KEY,
+# and possibly re-pointing the frontend's NEXT_PUBLIC_* build args at
+# whatever hostname Render actually assigns the backend).
+#
+# This is a best-effort blueprint written against Render's documented
+# schema -- it has not been validated against a live Render deploy. If
+# "Apply" reports a schema error, fix the flagged field and retry; the
+# error message will be far more reliable than a second guess here.
+
+databases:
+  - name: port-copilot-db
+    databaseName: portcopilot
+    user: portcopilot
+    plan: starter
+
+services:
+  - type: redis
+    name: port-copilot-redis
+    plan: starter
+    ipAllowList: []
+
+  - type: web
+    name: port-copilot-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: port-copilot-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: port-copilot-redis
+          property: connectionString
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "10080"
+      - key: BACKEND_CORS_ORIGINS
+        value: https://port-copilot-frontend.onrender.com
+      # Set in the Render dashboard after import (sync: false keeps it out
+      # of this file / git). Copilot runs in retrieval-only mode without it.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-4-5
+
+  - type: web
+    name: port-copilot-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: starter
+    envVars:
+      # Next.js inlines NEXT_PUBLIC_* at build time. These assume Render
+      # grants the backend service the hostname implied by its `name`
+      # above -- verify against the actual assigned URL in the dashboard
+      # after first deploy and update here (then redeploy) if it differs.
+      - key: NEXT_PUBLIC_API_URL
+        value: https://port-copilot-backend.onrender.com
+      - key: NEXT_PUBLIC_WS_URL
+        value: wss://port-copilot-backend.onrender.com
